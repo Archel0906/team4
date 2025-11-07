@@ -5,6 +5,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 APP_URL = os.getenv("APP_URL", "http://localhost:3000")
 WAIT_SEC = int(os.getenv("WAIT_SEC", 10))
@@ -16,7 +18,10 @@ def driver():
     if os.getenv("HEADLESS", "0") == "1":
         opts.add_argument("--headless=new")
     opts.add_argument("--window-size=1920,1080")
-    d = webdriver.Chrome(options=opts)
+    
+    service = Service(ChromeDriverManager().install())
+    d = webdriver.Chrome(service=service, options=opts)
+    
     yield d
     d.quit()
 
