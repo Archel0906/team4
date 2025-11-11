@@ -1,27 +1,32 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *.pyo
-*.pyd
-.pytest_cache/
-*.log
+*$py.class
 
-# Env
+# 가상환경
 venv/
-.venv/
-.env
-.env.*
+env/
+ENV/
+.venv
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Dist/Coverage
-dist/
-build/
-*.egg-info/
+# 테스트
+.pytest_cache/
+.coverage
 htmlcov/
-.coverage*
+*.log
 
-# (옵션) 드라이버/다운로드
+# 드라이버/다운로드
 drivers/
+
+# 아티팩트
+artifacts/
+*.png
+*.html
