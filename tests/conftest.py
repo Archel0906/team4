@@ -54,7 +54,7 @@ def driver():
     d = webdriver.Chrome(service=service, options=opts)
     
     yield d
-    # d.quit()
+    d.quit()
 
 @pytest.fixture
 def login(driver):
