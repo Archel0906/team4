@@ -72,7 +72,7 @@ def test_chat_history_area_exists(driver, login):
 #     if len(chat_items) == 0:
 #         pytest.skip("대화가 0개입니다. 테스트를 건너뜁니다.")
 #     else:
-#         assert len(chat_items) >= 1, "대화 목록이 비어 있음!"
+#         assert len(chat_items) >= 1, "대화 목록이 비어 있음!" 
 #         print(f"대화 목록이 {len(chat_items)}개 있습니다. 최신 대화가 맨 위에 있다고 판단됩니다.")
 
 
