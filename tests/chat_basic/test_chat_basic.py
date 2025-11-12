@@ -1,3 +1,6 @@
+# 작성자 이홍주
+# 
+#
 
 from src.pages.chat_basic import chat_basic
 from selenium.webdriver.support.ui import WebDriverWait
