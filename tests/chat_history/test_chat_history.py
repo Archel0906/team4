@@ -5,6 +5,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
 from pages.base_page import BasePage  # 공통 기능 상속용
 
+# 주석 처리 된 부분은 테스트 PASS 완료 된 부분 + 아직 점검 필요한 부분을 주석 처리
 # ----------------------- CHAT-HIS-001 -----------------------
 # @pytest.mark.ui
 
@@ -456,15 +457,6 @@ def test_chat_history_delete_in_search_popup(login, driver):
     except TimeoutException:
         print("검색 결과 내 삭제 버튼 없음")
         pytest.fail("삭제 버튼이 표시되지 않음")
-
-# ----------------------- CHAT-HIS-015 -----------------------
-import pytest
-import time
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.support import expected_conditions as EC
-
 
 # ----------------------- CHAT-HIS-015 -----------------------
 @pytest.mark.ui
