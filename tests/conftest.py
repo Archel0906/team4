@@ -2,13 +2,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()  # env 파일 전체를 미리 읽어서 login()에서 사용 가능하게 함
 
-import sys
-
-# sys.path 설정을 맨 위로 (다른 import보다 먼저)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
-sys.path.insert(0, os.path.join(project_root, 'src'))  # src 경로 추가
-
 import re
 import pytest
 from datetime import datetime
@@ -23,7 +16,7 @@ from selenium.common.exceptions import WebDriverException
 
 from webdriver_manager.chrome import ChromeDriverManager
 
-from pages.base_page import BasePage
+from src.pages.base_page import BasePage
 from src.config.settings import get_default_admin
 
 # 환경변수 기반 아티팩트 설정
