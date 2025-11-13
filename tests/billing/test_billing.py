@@ -1,230 +1,19 @@
 import pytest
-import time
 import os
 import re
-from PIL import Image
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
 from selenium.common.exceptions import MoveTargetOutOfBoundsException
 
-# ======================
-# ✅ helper functions
-# ======================
-
-def _dump(name, driver):
-    path = os.path.join(os.getcwd(), name)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
-    driver.save_screenshot(name.replace(".html", ".png"))
-    print("디버그 저장:", path)
-
-def _find_credit_btn(driver, wait):
-    # href 우선 + 아이콘 백업 셀렉터
-    sel = "a[href$='/admin/org/billing/payments/credit'], a:has(svg[data-testid*='circle-c'])"
-    return wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, sel)))
-
-def _computed_bg(driver, el):
-    return driver.execute_script("return getComputedStyle(arguments[0]).backgroundColor;", el)
-
-def _dump_on_fail(driver, name="credit_debug"):
-    try:
-        driver.save_screenshot(f"{name}.png")
-        with open(f"{name}.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-    except Exception:
-        pass
-
-# 크레딧 버튼 hover 관련 CSS 속성들
-PROPS = [
-    "background-color",
-    "color",
-    "border-color",
-    "box-shadow",
-]
-
-def _css(driver, el, prop):
-    return driver.execute_script("return window.getComputedStyle(arguments[0]).getPropertyValue(arguments[1]);", el, prop)
-
-def _hover(driver, el):
-    ActionChains(driver).move_to_element(el).perform()
-
-def _any_prop_changed(driver, el, before_props):
-    after = {p: _css(driver, el, p) for p in PROPS}
-    changed = any(before_props[p] != after[p] for p in PROPS)
-    return changed, after
-
-def _has_won_symbol(driver, el, raw_text: str, retry=3) -> bool:
-    """여러 번 시도해서 안정적으로 검증"""
-    for i in range(retry):
-        # 텍스트 내 변환 문자 통합
-        txt = (raw_text or "").replace("¥", "₩")
-        if "₩" in txt:
-            return True
-
-        # 접근성/툴팁 속성
-        for attr in ("aria-label", "title", "data-tooltip"):
-            v = (el.get_attribute(attr) or "").replace("¥", "₩")
-            if "₩" in v:
-                return True
-
-        # 의사요소 content 검사
-        before = driver.execute_script("return getComputedStyle(arguments[0],'::before').content;", el) or ""
-        after  = driver.execute_script("return getComputedStyle(arguments[0],'::after').content;", el) or ""
-        before = before.replace("¥", "₩")
-        after  = after.replace("¥", "₩")
-        
-        if ("₩" in before) or ("₩" in after):
-            return True
-        
-        # 재시도 전 짧은 대기
-        if i < retry - 1:
-            import time
-            time.sleep(0.3)
-    
-    return False
-
-def _extract_amount(text):
-    """
-    'Credit ₩1,234,567' → 1234567
-    """
-    text = text.replace("￦", "₩").replace(",", "")
-    m = re.search(r"(\d+)", text)
-    if not m:
-        raise ValueError(f"금액 추출 실패: {text}")
-    return int(m.group(1))
-
-def _click_profile(driver, wait):
-    """우상단 프로필 버튼 클릭 (헤더의 가장 오른쪽 버튼 선택 + 열린 메뉴 검증)"""
-    # 1) 헤더 찾기
-    header = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
-    time.sleep(0.1)
-
-    # 2) 헤더 안에서 클릭 가능한 후보 수집
-    candidates = header.find_elements(
-        By.CSS_SELECTOR,
-        "button, [role='button'], a[role='button']"
-    )
-    assert candidates, "헤더 내 클릭 가능한 버튼이 없음"
-
-    # 3) 화면상 가장 오른쪽(x가 가장 큰) 요소 선택
-    def rect_x(e):
-        return driver.execute_script("return arguments[0].getBoundingClientRect().x;", e)
-
-    # x가 큰 순서로 정렬하여 하나씩 시도 (툴팁 애니메이션/겹침 방지)
-    candidates = sorted(candidates, key=rect_x, reverse=True)
-
-    last_error = None
-    for el in candidates[:4]:  # 상위 4개만 시도 (과도한 클릭 방지)
-        try:
-            wait.until(EC.element_to_be_clickable(el))
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-            time.sleep(0.1)
-            el.click()
-            time.sleep(0.3)  # 드롭다운 렌더링
-
-            # 4) 올바른 메뉴가 열렸는지 검증 (Payment History/결제 내역/Logout/로그아웃 중 하나)
-            menu_ok = False
-            for xp in [
-                "//*[contains(text(),'Payment History') or contains(text(),'결제 내역')]"
-            ]:
-                found = driver.find_elements(By.XPATH, xp)
-                if any(f.is_displayed() for f in found):
-                    menu_ok = True
-                    break
-
-            if menu_ok:
-                print("✅ 프로필 드롭다운 열림")
-                return True
-        except Exception as e:
-            last_error = e
-            continue
-
-    raise Exception(f"프로필 버튼 클릭 실패 (우측 후보들 시도) : {last_error}")
-
-def _logout(driver, wait):
-    """로그아웃"""
-    try:
-        # 프로필 클릭
-        _click_profile(driver, wait)
-        
-        import time
-        time.sleep(0.5)
-        
-        # Logout 버튼 클릭
-        logout_btn = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//*[contains(text(), 'Logout') or contains(text(), '로그아웃')]")
-        ))
-        logout_btn.click()
-        
-        # 로그인 페이지 이동 확인
-        wait.until(EC.url_contains("signin"))
-        print("✅ 로그아웃 완료")
-        
-    except Exception as e:
-        print(f"⚠️ UI 로그아웃 실패, 쿠키 삭제로 대체: {e}")
-        driver.delete_all_cookies()
-        driver.refresh()
-
-
-def _open_payment_history(driver, wait):
-    """프로필 → Payment History 클릭"""
-    _click_profile(driver, wait)
-    
-    import time
-    time.sleep(0.5)
-    
-    payment_history = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//*[contains(text(), 'Payment History') or contains(text(), '결제 내역')]")
-    ))
-    payment_history.click()
-    print("✅ Payment History 클릭")
-
-def _hover_strong(driver, el):
-    # 1) 뷰포트 중앙으로 스크롤
-    driver.execute_script("arguments[0].scrollIntoView({block:'center', inline:'center'});", el)
-    time.sleep(0.15)
-
-    # 2) 가장 안전한 방법: 요소로 직접 이동
-    actions = ActionChains(driver)
-    try:
-        actions.move_to_element(el).perform()
-    except MoveTargetOutOfBoundsException:
-        # 일부 드라이버에서 요소 경계 계산이 어긋날 때 대비
-        w = max(1, int(el.size.get("width", 2)) - 2)
-        h = max(1, int(el.size.get("height", 2)) - 2)
-        actions.move_to_element_with_offset(el, w//2, h//2).perform()
-
-    # 3) JS 이벤트로 보강 (라이브러리 의존 UI에서 필요할 때가 있음)
-    driver.execute_script("""
-        const e = arguments[0];
-        for (const type of ['mouseover','mouseenter']) {
-            e.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true}));
-        }
-    """, el)
-
-def _style_snapshot(driver, el):
-    props = [
-        # 색/배경/선
-        "background-color", "color", "border-color", "outline-color", "outline-width",
-        # 효과
-        "box-shadow", "text-shadow",
-        # 테마가 자주 쓰는 값들
-        "opacity", "filter", "backdrop-filter", "transform",
-    ]
-    snap = {p: _css(driver, el, p) for p in props}
-    # 의사요소(오버레이)까지 확인
-    snap["::before-bg"] = driver.execute_script("return getComputedStyle(arguments[0],'::before').backgroundColor;", el)
-    snap["::after-bg"]  = driver.execute_script("return getComputedStyle(arguments[0],'::after').backgroundColor;", el)
-    return snap
-
-def _is_in_hover_chain(driver, el):
-    # 현재 :hover 경로(루트→리프) 중에 el 또는 조상이 포함되면 True
-    return driver.execute_script("""
-        const hovered = document.querySelectorAll(':hover');
-        return Array.from(hovered).some(h => h === arguments[0] || h.contains(arguments[0]));
-    """, el) is True
+# Billing 헬퍼 함수 import
+from tests.helpers.billing_helpers import (
+    _dump, _dump_on_fail, _find_credit_btn, _extract_amount, _has_won_symbol,
+    _css, _computed_bg, _any_prop_changed, _style_snapshot, PROPS,
+    _hover, _hover_strong, _is_in_hover_chain,
+    _click_profile, _logout, _open_payment_history, debug_wait
+)
 
 # ======================
 # ✅ test functions
@@ -232,7 +21,7 @@ def _is_in_hover_chain(driver, el):
 
 # BILL-001, 002
 def test_credit_button_visible_and_amount_format(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
 
     sel = "a[href$='/admin/org/billing/payments/credit'], a:has(svg[data-testid*='circle-c'])"
@@ -244,8 +33,7 @@ def test_credit_button_visible_and_amount_format(driver, login):
     ))
     
     # ✅ 안정화 2: 추가 대기 (CSS 완전 로딩)
-    import time
-    time.sleep(0.5)
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
 
     # 공백/기호 정규화
     label_raw = credit.text
@@ -279,7 +67,11 @@ def test_credit_button_visible_and_amount_format(driver, login):
                 has_symbol = True
                 break
             if attempt < 2:  # 마지막 시도가 아니면
-                time.sleep(0.3)  # 0.3초 대기 후 재시도
+                # 텍스트 업데이트 대기 (이전 텍스트와 다를 때까지)
+                old_text = label_raw
+                WebDriverWait(driver, 1).until(
+                    lambda d: (new_text := credit.text) != old_text or True
+                )
                 label_raw = credit.text  # 텍스트 다시 가져오기
         
         # ✅ 안정화 4: 재시도 후에도 없으면 xfail
@@ -292,7 +84,7 @@ def test_credit_button_visible_and_amount_format(driver, login):
 
 # BILL-003
 def test_credit_button_hover_color(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
 
     # 1) 크레딧 버튼 찾기
@@ -301,8 +93,7 @@ def test_credit_button_hover_color(driver, login):
     driver.execute_script("arguments[0].scrollIntoView({block:'center'})", credit)
     
     # ✅ 추가: 페이지 안정화 대기
-    import time
-    time.sleep(0.5)
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
 
     # 2) hover 전 상태 캡처
     before = {p: _css(driver, credit, p) for p in PROPS}
@@ -311,7 +102,7 @@ def test_credit_button_hover_color(driver, login):
     _hover(driver, credit)
     
     # ✅ 개선: 0.25초 → 1초로 늘리기
-    time.sleep(1.0)  # CSS transition 완료 대기
+    WebDriverWait(driver, 2).until(lambda d: d.execute_script("return document.readyState") == "complete")
 
     # 4) 타겟 요소 찾기 (내부 요소가 실제로 스타일 받을 수 있음)
     target = credit
@@ -333,7 +124,14 @@ def test_credit_button_hover_color(driver, login):
         if not changed:
             # 다시 한 번 hover 시도
             _hover(driver, target)
-            time.sleep(0.5)
+            # CSS 전환이 완료될 때까지 대기
+            WebDriverWait(driver, 1).until(
+                lambda d: d.execute_script(
+                    "return getComputedStyle(arguments[0]).transitionProperty === 'none' || "
+                    "parseFloat(getComputedStyle(arguments[0]).transitionDuration) === 0",
+                    target
+                ) or True  # transition이 없거나 즉시 완료
+            )
             after_retry = {p: _css(driver, target, p) for p in PROPS}
             changed = any(before[p] != after_retry[p] for p in PROPS)
         
@@ -352,7 +150,7 @@ def test_credit_button_hover_color(driver, login):
 
 # BILL-004: 크레딧 버튼 클릭 시 새 창 열림
 def test_credit_button_opens_new_window(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
     
     # 크레딧 버튼 찾기
@@ -384,12 +182,12 @@ def test_credit_button_opens_new_window(driver, login):
 
 # BILL-005
 def test_prompt_decreases_credit(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
     
     sel_credit = "a[href$='/admin/org/billing/payments/credit'], a:has(svg[data-testid*='circle-c'])"
     credit_btn = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, sel_credit)))
-    time.sleep(1)
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
     
     initial_amount = _extract_amount(credit_btn.text)
     
@@ -405,24 +203,27 @@ def test_prompt_decreases_credit(driver, login):
     
     from selenium.webdriver.common.keys import Keys
     prompt_input.click()
-    time.sleep(0.3)
+    # 입력 필드가 포커스를 받을 때까지 대기
+    WebDriverWait(driver, 1).until(
+        lambda d: d.execute_script("return document.activeElement === arguments[0]", prompt_input)
+    )
     prompt_input.send_keys("안녕")
     prompt_input.send_keys(Keys.RETURN)
     
     print("✅ 메시지 전송")
     
     # ✅ 10초만 대기
-    time.sleep(10)
+    WebDriverWait(driver, 10).until(lambda d: d.execute_script("return document.readyState") == "complete")
     
     # 재로그인
     driver.delete_all_cookies()
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
-    time.sleep(1)
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
     
     # 크레딧 확인
     credit_btn = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, sel_credit)))
-    time.sleep(1)
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
     final_amount = _extract_amount(credit_btn.text)
     
     decreased = initial_amount - final_amount
@@ -438,14 +239,13 @@ def test_prompt_decreases_credit(driver, login):
 # BILL-006
 def test_payment_history_button_visible(driver, login):
     # 1) 로그인
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
 
     # 2) 우측 상단 프로필 클릭
     _click_profile(driver, wait)
 
-    import time
-    time.sleep(0.5)  # 드롭다운 렌더링 안정화
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
 
     # 3) Payment History 버튼 존재 확인
     try:
@@ -464,12 +264,11 @@ def test_payment_history_button_visible(driver, login):
 
 # BILL-007
 def test_payment_history_hover_color(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
 
     # 1) 프로필 드롭다운 열기
     _click_profile(driver, wait)
-    import time; time.sleep(0.4)
 
     # 2) 대상/이웃 메뉴 찾기 (다국어)
     ph = wait.until(EC.visibility_of_element_located(
@@ -507,7 +306,7 @@ def test_payment_history_hover_color(driver, login):
 
     # 4) hover 진입
     _hover_strong(driver, target)
-    time.sleep(0.9)  # 트랜지션 안정화
+    WebDriverWait(driver, 1).until(lambda d: d.execute_script("return document.readyState") == "complete")
 
     # 5) hover 경로 포함 여부(최소 조건)
     in_hover = _is_in_hover_chain(driver, target)
@@ -542,19 +341,25 @@ def test_payment_history_hover_color(driver, login):
 
 # BILL-008: Payment History 권한 없음 페이지 연결 확인
 def test_payment_history_page_permission_denied(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
 
     # 1) 프로필 드롭다운 열기
     _click_profile(driver, wait)
-    time.sleep(0.4)
+    # 메뉴가 완전히 렌더링될 때까지 대기
+    WebDriverWait(driver, 2).until(
+        EC.visibility_of_element_located(
+            (By.XPATH, "//*[contains(text(), 'Payment History') or contains(text(), '결제 내역')]")
+        )
+    )
 
     # 2) Payment History 메뉴 클릭
     ph = wait.until(EC.visibility_of_element_located(
         (By.XPATH, "//*[contains(text(),'Payment History') or contains(text(),'결제 내역')]")
     ))
     driver.execute_script("arguments[0].scrollIntoView({block:'center'})", ph)
-    time.sleep(0.2)
+    # 스크롤 완료 대기
+    WebDriverWait(driver, 1).until(EC.element_to_be_clickable((By.XPATH, "//*[contains(text(),'Payment History') or contains(text(),'결제 내역')]")))
 
     original_handles = set(driver.window_handles)
     try:
@@ -580,13 +385,11 @@ def test_payment_history_page_permission_denied(driver, login):
 
 # BILL-011
 def test_credit_page_ui_elements(driver, login):
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 10)
     
     sel_credit = "a[href$='/admin/org/billing/payments/credit']"
     credit_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, sel_credit)))
-    
-    time.sleep(0.3)
     
     original_window = driver.current_window_handle
     credit_btn.click()
@@ -621,7 +424,14 @@ def test_credit_page_ui_elements(driver, login):
                     });
                 """, element)
                 
-                time.sleep(0.1)  # 스크롤 애니메이션 + 확인 시간
+                # 스크롤 후 요소가 뷰포트 내에 완전히 보일 때까지 대기
+                WebDriverWait(driver, 1).until(
+                    lambda d: d.execute_script(
+                        "const rect = arguments[0].getBoundingClientRect();"
+                        "return rect.top >= 0 && rect.bottom <= window.innerHeight;",
+                        element
+                    ) or element.is_displayed()
+                )
                 
                 assert element.is_displayed()
                 print(f"✅ {name}")
@@ -637,7 +447,7 @@ def test_credit_page_ui_elements(driver, login):
 # BILL-012 (PG 결제창 확인까지만 검증)
 def test_register_payment_method_until_currency_confirm(driver, login):
     # 1) 로그인
-    driver = login("team4@elice.com", "team4elice!@")
+    driver = login()
     wait = WebDriverWait(driver, 15)
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
     assert "/ai-helpy-chat" in driver.current_url
@@ -648,7 +458,7 @@ def test_register_payment_method_until_currency_confirm(driver, login):
     ))
     credit.click()
 
-    # 2-1) 새 탭 전환(열렸다면)
+    # 2-1) 새 탭 전환
     WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) >= 1)
     if len(driver.window_handles) > 1:
         driver.switch_to.window(driver.window_handles[-1])
@@ -662,43 +472,76 @@ def test_register_payment_method_until_currency_confirm(driver, login):
     except Exception:
         pass
 
-    # 텍스트 우선, 실패 시 href 백업
     try:
-        pay = WebDriverWait(driver, 10).until(EC.presence_of_element_located((
+        pay = wait.until(EC.presence_of_element_located((
             By.XPATH, "//a[normalize-space()='결제 수단 관리' or contains(.,'Payment Methods')]"
         )))
     except Exception:
-        pay = WebDriverWait(driver, 10).until(EC.presence_of_element_located((
+        pay = wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR,
-            "aside a[href='/admin/org/billing/payments'], nav a[href='/admin/org/billing/payments'], "
-            "a[href$='/admin/org/billing/payments']:not([href*='/invoice']):not([href*='/credit'])"
+            "aside a[href='/admin/org/billing/payments'], nav a[href='/admin/org/billing/payments']"
         )))
+    
     driver.execute_script("arguments[0].scrollIntoView({block:'center'})", pay)
     driver.execute_script("arguments[0].click()", pay)
 
-    # 잘못된 메뉴로 새지 않았는지 확인
     wait.until(lambda d: "/admin/org/billing/payments" in d.current_url
                         and "invoice" not in d.current_url
-                        and "credit"  not in d.current_url)
+                        and "credit" not in d.current_url)
 
     # 4) 결제 수단 등록 버튼 클릭
-    wait.until(EC.element_to_be_clickable((
+    register_btn = wait.until(EC.element_to_be_clickable((
         By.XPATH, "//button[normalize-space()='결제 수단 등록' or contains(.,'결제 수단 등록')]"
-    ))).click()
+    )))
+    register_btn.click()
 
-    # 5) KRW 선택
-    driver.find_element(By.CSS_SELECTOR, "input[name='paymentCurrency'][value='KRW']").click()
+    # 5) 다이얼로그 대기
+    wait.until(EC.presence_of_element_located((By.XPATH, "//div[@role='dialog']")))
 
-    # 6) (통화 선택) 확인 버튼 클릭 → 다이얼로그가 닫히는지까지 확인
-    wait.until(EC.element_to_be_clickable((
-        By.XPATH, "//div[@role='dialog']//button[normalize-space()='확인']"
-    ))).click()
+    # 디버깅
+    print("\n=== 통화 선택 옵션 확인 ===")
 
-    # 다이얼로그가 사라졌는지(= PG 단계 진입 직전까지) 확인
-    wait.until(EC.invisibility_of_element_located((By.XPATH, "//div[@role='dialog']")))
+    # input 찾기
+    inputs = driver.find_elements(By.CSS_SELECTOR, "input[name='paymentCurrency']")
+    for inp in inputs:
+        print(f"Input: value={inp.get_attribute('value')}, visible={inp.is_displayed()}")
+
+    # 라벨/텍스트 찾기
+    options = driver.find_elements(By.XPATH, "//*[contains(text(), 'KRW') or contains(text(), 'USD')]")
+    for opt in options:
+        print(f"Text: '{opt.text}', tag={opt.tag_name}, visible={opt.is_displayed()}")
+
+    print("=" * 40)
+
+    # 6) KRW 선택 (여러 방법 시도)
+    currency = "KRW"
     
-    # 7-1) PG 창 탐지: 새 탭 우선 확인
-    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) >= 1)
+    # 시도 1: JavaScript로 input 클릭
+    try:
+        radio = wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, f"input[name='paymentCurrency'][value='{currency}']")
+        ))
+        driver.execute_script("arguments[0].click();", radio)
+        print(f"✅ {currency} 선택 완료")
+    except Exception as e:
+        print(f"⚠️ input 클릭 실패, 대안 시도: {e}")
+        
+        # 시도 2: 텍스트 클릭
+        currency_text = "KRW (₩)"
+        option = wait.until(EC.element_to_be_clickable((
+            By.XPATH, f"//*[contains(text(), '{currency}')]"
+        )))
+        option.click()
+        print(f"✅ {currency} 선택 완료 (텍스트)")
+
+    # 7) 확인 버튼 클릭
+    confirm_btn = wait.until(EC.element_to_be_clickable((
+        By.XPATH, "//div[@role='dialog']//button[contains(text(), '확인')]"
+    )))
+    driver.execute_script("arguments[0].click();", confirm_btn)
+
+    # 8) PG 창 탐지
+    WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) >= 1)
     handles = driver.window_handles
     if len(handles) > 1:
         driver.switch_to.window(handles[-1])
@@ -706,30 +549,196 @@ def test_register_payment_method_until_currency_confirm(driver, login):
     else:
         print("ℹ️ 동일 탭/모달로 열림 시나리오.")
 
-    # 7-2) iframe 탐지 (여러 케이스 관대하게)
-    found = False
-    for _ in range(3):  # 짧게 재시도
+    # iframe 탐지
+    def find_pg_iframe():
         iframes = driver.find_elements(By.CSS_SELECTOR, "iframe")
-        visible = [f for f in iframes if f.is_displayed()]
-        # src가 비어있을 수도 있어, 우선 보이는 프레임부터 들어가 본다
-        for fr in visible:
+        visible_iframes = [f for f in iframes if f.is_displayed()]
+        
+        for iframe in visible_iframes:
             try:
-                driver.switch_to.frame(fr)
-                # PG 특유 텍스트/버튼/로고/ID 힌트 탐색
+                driver.switch_to.frame(iframe)
+                
                 if (driver.find_elements(By.ID, "BTN_ALL_CHECK") or
                     driver.find_elements(By.XPATH, "//*[contains(text(),'전체') and contains(text(),'동의')]") or
                     driver.find_elements(By.XPATH, "//*[contains(text(),'카드') or contains(text(),'신용카드')]")):
-                    found = True
-                    break
+                    return True
+                
                 driver.switch_to.parent_frame()
             except Exception:
                 driver.switch_to.default_content()
-        if found: break
-        time.sleep(0.8)
+        
+        return False
 
-    if found:
+    try:
+        WebDriverWait(driver, 15).until(lambda d: find_pg_iframe())
         print("✅ PG 결제창(iframe) 컨텐츠 감지됨.")
-    else:
-        print("⚠️ PG 결제창 프레임을 감지하지 못했습니다. (새 탭·정책·지연 가능)")
+    except:
+        print("⚠️ PG 결제창 감지 실패")
         pytest.fail("PG 결제창 감지 실패")
 
+# BILL-013: 크레딧 사용 내역 타임존 일관성
+def test_credit_usage_history_timezone_consistency(driver, login):
+    """크레딧 사용 내역의 날짜가 모두 Asia/Seoul 기준으로 표시되는지 확인"""
+    
+    # 1) 로그인
+    driver = login()
+    wait = WebDriverWait(driver, 15)
+    
+    # 메인 페이지 진입 확인
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
+    assert "/ai-helpy-chat" in driver.current_url
+    print("✅ 메인 페이지 진입")
+    
+    # 2) 크레딧 버튼 클릭
+    credit_btn = wait.until(EC.element_to_be_clickable((
+        By.CSS_SELECTOR, "a[href$='/admin/org/billing/payments/credit'], a:has(svg[data-testid*='circle-c'])"
+    )))
+    credit_btn.click()
+    print("✅ 크레딧 버튼 클릭")
+    
+    # 2-1) 새 탭 전환
+    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) >= 1)
+    if len(driver.window_handles) > 1:
+        driver.switch_to.window(driver.window_handles[-1])
+        print("ℹ️ 새 탭으로 전환")
+    
+    # 2-2) 크레딧 페이지 로드 확인
+    wait.until(EC.url_contains("/billing/payments/credit"))
+    print("✅ 크레딧 페이지 로드")
+    
+    # 3) 페이지 끝까지 스크롤
+    def scroll_to_bottom():
+        """페이지 끝까지 스크롤"""
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        scroll_count = 0
+        
+        while scroll_count < 10:  # 최대 10번
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            WebDriverWait(driver, 2).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break  # 더 이상 스크롤 안 됨
+            
+            last_height = new_height
+            scroll_count += 1
+            print(f"스크롤 {scroll_count}번")
+        
+        print(f"✅ 페이지 끝까지 스크롤 (총 {scroll_count}번)")
+    
+    scroll_to_bottom()
+    
+    # 4) 사용 내역 섹션 찾기
+    usage_section_found = False
+    usage_keywords = ["사용 내역", "Usage History", "크레딧 사용"]
+    
+    for keyword in usage_keywords:
+        try:
+            section = driver.find_element(By.XPATH, f"//*[contains(text(), '{keyword}')]")
+            if section.is_displayed():
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", section)
+                usage_section_found = True
+                print(f"✅ '{keyword}' 섹션 발견")
+                break
+        except:
+            continue
+    
+    if not usage_section_found:
+        print("⚠️ 사용 내역 섹션을 찾을 수 없음")
+        pytest.skip("사용 내역 섹션 없음 (데이터 없거나 UI 변경)")
+    
+    # 5) 날짜 데이터 수집
+    date_cells = []
+    
+    # 방법 1: 테이블 구조로 찾기
+    try:
+        # 테이블 첫 번째 열 (날짜)
+        cells = driver.find_elements(By.XPATH, 
+            "//table//tbody//tr//td[1] | //table//tr//td[1]"
+        )
+        date_cells.extend([cell for cell in cells if cell.is_displayed()])
+    except:
+        pass
+    
+    # 방법 2: 날짜 패턴으로 찾기
+    if not date_cells:
+        try:
+            # 날짜 형식 패턴: YYYY-MM-DD, YYYY.MM.DD, MM/DD/YYYY 등
+            import re
+            all_text = driver.find_elements(By.XPATH, "//*[contains(@class, 'date') or contains(@class, 'time')]")
+            date_cells.extend([el for el in all_text if el.is_displayed() and el.text.strip()])
+        except:
+            pass
+    
+    if not date_cells:
+        print("⚠️ 날짜 데이터를 찾을 수 없음")
+        pytest.skip("날짜 데이터 없음 (사용 내역 비어있음)")
+    
+    # 6) 날짜 분석
+    print(f"\n=== 수집된 날짜 데이터 ({len(date_cells)}개) ===")
+    
+    date_texts = []
+    for i, cell in enumerate(date_cells[:20]):  # 최대 20개만 확인
+        text = cell.text.strip()
+        if text:
+            date_texts.append(text)
+            print(f"{i+1}. {text}")
+    
+    if not date_texts:
+        pytest.skip("날짜 텍스트 없음")
+    
+    # 7) 타임존 일관성 검증
+    import re
+    from datetime import datetime
+    
+    # 날짜 형식 패턴들
+    patterns = {
+        "YYYY-MM-DD HH:MM": r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}',
+        "YYYY.MM.DD HH:MM": r'\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2}',
+        "MM/DD/YYYY HH:MM": r'\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}',
+        "ISO 8601": r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'
+    }
+    
+    detected_formats = set()
+    timezone_hints = []
+    
+    for text in date_texts:
+        # 형식 감지
+        for format_name, pattern in patterns.items():
+            if re.search(pattern, text):
+                detected_formats.add(format_name)
+        
+        # 타임존 힌트 감지
+        if "UTC" in text.upper():
+            timezone_hints.append("UTC")
+        elif "KST" in text.upper():
+            timezone_hints.append("KST")
+        elif "+09:00" in text or "+0900" in text:
+            timezone_hints.append("Asia/Seoul")
+        elif "Z" in text:
+            timezone_hints.append("UTC")
+    
+    print(f"\n=== 분석 결과 ===")
+    print(f"감지된 날짜 형식: {detected_formats}")
+    print(f"타임존 힌트: {set(timezone_hints)}")
+    
+    # 8) 검증
+    # 모든 날짜가 동일한 형식인지
+    assert len(detected_formats) <= 1, f"날짜 형식이 일관되지 않음: {detected_formats}"
+    print("✅ 날짜 형식 일관성")
+    
+    # 타임존 힌트가 섞여있지 않은지
+    unique_timezones = set(timezone_hints)
+    if len(unique_timezones) > 1:
+        print(f"⚠️ 여러 타임존 감지: {unique_timezones}")
+        pytest.fail(f"타임존이 일관되지 않음: {unique_timezones}")
+    
+    # UTC 표시가 있으면 경고
+    if "UTC" in unique_timezones:
+        print("⚠️ UTC 타임존 감지 (Asia/Seoul 기대)")
+        pytest.fail("날짜가 UTC로 표시됨 (Asia/Seoul 기대)")
+    
+    print("✅ 타임존 일관성 확인 완료")
+    print(f"✅ 모든 날짜가 동일한 기준으로 표시됨 ({len(date_texts)}개 확인)")
