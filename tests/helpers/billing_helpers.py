@@ -273,3 +273,4 @@ def _open_payment_history(driver, wait):
     ))
     payment_history.click()
     print("✅ Payment History 클릭")
+

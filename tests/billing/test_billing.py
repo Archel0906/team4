@@ -742,3 +742,192 @@ def test_credit_usage_history_timezone_consistency(driver, login):
     
     print("✅ 타임존 일관성 확인 완료")
     print(f"✅ 모든 날짜가 동일한 기준으로 표시됨 ({len(date_texts)}개 확인)")
+
+# BILL-022
+def test_auto_recharge_toggle_exists(driver, login):
+    """크레딧 페이지에 자동 충전 토글 버튼이 있는지 확인"""
+    
+    # 1) 로그인
+    driver = login()
+    wait = WebDriverWait(driver, 15)
+    
+    # 메인 페이지 진입 확인
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
+    assert "/ai-helpy-chat" in driver.current_url
+    print("✅ 메인 페이지 진입")
+    
+    # 2) 크레딧 버튼 클릭
+    credit_btn = wait.until(EC.element_to_be_clickable((
+        By.CSS_SELECTOR, "a[href$='/admin/org/billing/payments/credit'], a:has(svg[data-testid*='circle-c'])"
+    )))
+    credit_btn.click()
+    print("✅ 크레딧 버튼 클릭")
+    
+    # 2-1) 새 탭 전환
+    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) >= 1)
+    if len(driver.window_handles) > 1:
+        driver.switch_to.window(driver.window_handles[-1])
+        print("ℹ️ 새 탭으로 전환")
+    
+    # 2-2) 크레딧 페이지 로드 확인
+    wait.until(EC.url_contains("/billing/payments/credit"))
+    print("✅ 크레딧 페이지 로드")
+    
+    # 3) 페이지 끝까지 스크롤 (자동 충전 섹션 찾기)
+    def scroll_to_auto_recharge():
+        """자동 충전 섹션이 보일 때까지 스크롤"""
+        max_scrolls = 15
+        
+        for i in range(max_scrolls):
+            # "크레딧 자동 충전" 텍스트 찾기
+            try:
+                section = driver.find_element(
+                    By.XPATH, 
+                    "//*[contains(text(), '크레딧 자동 충전')]"
+                )
+                if section.is_displayed():
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", section)
+                    WebDriverWait(driver, 1).until(
+                        lambda d: d.execute_script("return document.readyState") == "complete"
+                    )
+                    print("✅ '크레딧 자동 충전' 섹션 발견")
+                    return True
+            except:
+                pass
+            
+            # 못 찾았으면 계속 스크롤
+            last_height = driver.execute_script("return document.body.scrollHeight")
+            driver.execute_script("window.scrollBy(0, 500);")
+            WebDriverWait(driver, 1).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            
+            # 더 이상 스크롤 안 되면 중단
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                print("⚠️ 페이지 끝에 도달")
+                break
+        
+        return False
+    
+    found_section = scroll_to_auto_recharge()
+    assert found_section, "자동 충전 섹션을 찾을 수 없음"
+    
+    # 4) 토글 버튼 찾기 (ID 사용) 
+    toggle_element = driver.find_element(By.ID, "credit-auto-topup-switch")
+    print("✅ 토글 버튼 발견 (ID 사용)")
+        
+    # 5) 검증
+    assert toggle_element is not None, "자동 충전 토글 버튼을 찾을 수 없음"
+    
+    # 토글이 존재하는지 확인 (화면에 보이는지는 체크 안 함 - disabled일 수 있으므로)
+    assert toggle_element.get_attribute("type") == "checkbox", "토글이 checkbox 타입이 아님"
+    print("✅ 자동 충전 토글 버튼 확인 완료")
+    
+    # 6) 추가 정보 출력 (디버깅용)
+    is_disabled = toggle_element.get_attribute("disabled") is not None
+    is_checked = toggle_element.get_attribute("checked") is not None
+    toggle_id = toggle_element.get_attribute("id")
+    toggle_name = toggle_element.get_attribute("name")
+    
+    print(f"토글 정보:")
+    print(f"  - ID: {toggle_id}")
+    print(f"  - Name: {toggle_name}")
+    print(f"  - Disabled: {is_disabled}")
+    print(f"  - Checked: {is_checked}")
+    
+    # 7) disabled 상태면 경고 출력
+    if is_disabled:
+        print("⚠️ 토글이 비활성화(disabled) 상태입니다")
+        print("   (결제 수단 미등록 등의 이유일 수 있음)")
+
+# BILL-026: 크레딧 충전 버튼 disabled 상태 확인
+def test_credit_charge_button_disabled_without_selection(driver, login):
+    """
+    라디오 버튼 선택 후 크레딧 충전 버튼이 disabled 상태인지 확인
+    """
+    
+    # 1) 로그인
+    driver = login()
+    wait = WebDriverWait(driver, 15)
+    
+    # 메인 페이지 진입 확인
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
+    assert "/ai-helpy-chat" in driver.current_url
+    print("✅ 메인 페이지 진입")
+    
+    # 2) 크레딧 버튼 클릭
+    credit_btn = wait.until(EC.element_to_be_clickable((
+        By.CSS_SELECTOR, "a[href$='/admin/org/billing/payments/credit'], a:has(svg[data-testid*='circle-c'])"
+    )))
+    credit_btn.click()
+    print("✅ 크레딧 버튼 클릭")
+    
+    # 2-1) 새 탭 전환
+    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) >= 1)
+    if len(driver.window_handles) > 1:
+        driver.switch_to.window(driver.window_handles[-1])
+        print("ℹ️ 새 탭으로 전환")
+    
+    # 2-2) 크레딧 페이지 로드 확인
+    wait.until(EC.url_contains("/billing/payments/credit"))
+    print("✅ 크레딧 페이지 로드")
+    
+    # 3) ₩50,000 크레딧 라디오 버튼 찾기
+    radio_50000 = wait.until(EC.presence_of_element_located((
+        By.CSS_SELECTOR,
+        "input[type='radio'][value='50000']"
+    )))
+    
+    # label 찾아서 클릭 (MUI는 label을 클릭해야 함)
+    label_id = radio_50000.get_attribute("id")
+    label_50000 = wait.until(EC.element_to_be_clickable((
+        By.CSS_SELECTOR,
+        f"label[for='{label_id}']"
+    )))
+    
+    # 스크롤하여 보이게 만들기
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", label_50000)
+    WebDriverWait(driver, 1).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    
+    # 클릭
+    label_50000.click()
+    print("✅ ₩50,000 크레딧 라벨 클릭")
+    
+    # 🆕 선택 확인 (중요!)
+    try:
+        WebDriverWait(driver, 3).until(
+            lambda d: "Mui-checked" in label_50000.get_attribute("class")
+        )
+        print("✅ ₩50,000 크레딧 선택 확인 (Mui-checked 클래스)")
+    except:
+        # 백업: radio input의 checked 상태 확인
+        WebDriverWait(driver, 3).until(
+            lambda d: radio_50000.is_selected()
+        )
+        print("✅ ₩50,000 크레딧 선택 확인 (is_selected)")
+    
+    # 4) 크레딧 충전 버튼 찾기
+    charge_btn = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//button[contains(text(), '크레딧 충전')]"
+    )))
+    print("✅ 크레딧 충전 버튼 발견")
+    
+    # 5) disabled 상태 확인
+    is_disabled = charge_btn.get_attribute("disabled") is not None
+    
+    assert is_disabled, "크레딧 충전 버튼이 활성화 상태입니다 (disabled 기대)"
+    print("✅ 크레딧 충전 버튼이 disabled 상태 확인 완료")
+    
+    # 6) 추가 정보 출력 (디버깅용)
+    button_classes = charge_btn.get_attribute("class")
+    is_mui_disabled = "Mui-disabled" in button_classes
+    is_really_checked = radio_50000.is_selected()
+    
+    print(f"최종 확인:")
+    print(f"  - ₩50,000 선택됨: {is_really_checked}")
+    print(f"  - 충전 버튼 disabled: {is_disabled}")
+    print(f"  - Mui-disabled 클래스: {is_mui_disabled}")
