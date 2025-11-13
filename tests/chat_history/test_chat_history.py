@@ -1,17 +1,23 @@
+# 표준 라이브러리
+import os
+# 서드파티 라이브러리
 import pytest
+from dotenv import load_dotenv
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+# 로컬/프로젝트 모듈
 from pages.base_page import BasePage  # 공통 기능 상속용
 
 # ----------------------- CHAT-HIS-001 -----------------------
 @pytest.mark.ui
 
 def test_chat_history_area_exists(driver, login):
-    
-    # 로그인
-    driver = login("team4@elice.com", "team4elice!@")
+
+    # env 기반 자동 로그인(.env 파일 읽기)
+    load_dotenv()
+    driver = login()  
 
     try:
         # 영역 존재 여부만 확인 (대화 기록이 없는 경우도 있으니 표시 여부는 무시)
