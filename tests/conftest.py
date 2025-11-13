@@ -83,6 +83,12 @@ def driver(chrome_driver_path):
         opts.add_argument("--headless=new")
     opts.add_argument("--window-size=1920,1080")
     
+    # 한국어 설정 추가
+    opts.add_argument("--lang=ko-KR")
+    opts.add_experimental_option('prefs', {
+        'intl.accept_languages': 'ko-KR,ko,en-US,en'
+    })
+    
     # ChromeDriver 서비스 생성 (이미 설치된 경로 재사용)
     service = Service(chrome_driver_path)
     browser = webdriver.Chrome(service=service, options=opts)
@@ -91,14 +97,44 @@ def driver(chrome_driver_path):
     # 테스트 종료 후 브라우저 닫기
     browser.quit()
 
-# 로그인 fixture 
+
+def _set_language_korean(driver):
+    """
+    페이지 언어를 한국어로 설정
+    localStorage + URL 파라미터 조합
+    """
+    try:
+        # localStorage 설정
+        driver.execute_script("""
+            localStorage.setItem('language', 'ko');
+            localStorage.setItem('locale', 'ko-KR');
+            localStorage.setItem('lang', 'ko');
+            localStorage.setItem('i18nextLng', 'ko');
+        """)
+        
+        # URL에 lang 파라미터 추가
+        current_url = driver.current_url
+        if "lang=" not in current_url:
+            separator = "&" if "?" in current_url else "?"
+            driver.get(f"{current_url}{separator}lang=ko")
+        else:
+            driver.refresh()
+        
+        # 로드 대기
+        WebDriverWait(driver, 10).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        
+        print("✅ 한국어 설정 완료")
+        return True
+        
+    except Exception as e:
+        print(f"⚠️ 언어 설정 실패: {e}")
+        return False
+
+
 @pytest.fixture
 def login(driver):
-    """
-    사용법:
-        driver = login()           # .env의 MY_ADMIN_ACCOUNT 사용
-        driver = login(ADMIN2)     # 특정 계정 지정
-    """
     def _login(account=None):
         
         # 1. 계정 선택
@@ -144,6 +180,9 @@ def login(driver):
         
         # 8. 로그인 완료 대기
         WebDriverWait(driver, 30).until(EC.url_contains("/ai-helpy-chat"))
+        
+        # 🆕 9. 언어를 한국어로 설정
+        _set_language_korean(driver)
 
         return driver
 
