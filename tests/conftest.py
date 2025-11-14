@@ -80,7 +80,7 @@ def chrome_options():
     return opts
 
 # ───────────────────────────────────────────────────────────────
-# 7. 크롬 드라이버 경로 (webdriver-manager
+# 7. 크롬 드라이버 경로 (webdriver-manager)
 # ───────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
