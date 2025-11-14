@@ -4,7 +4,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # 공통 헬퍼 import
-from tests.helpers.common_helpers import (_click_profile, _logout
+from tests.helpers.common_helpers import (_click_profile, _logout,
 )
 
 # AC-003: 이미 가입된 이메일로 회원가입 차단
@@ -157,6 +157,176 @@ def test_logout_prevents_back_navigation(driver, login):
     print(f"   - 메인 페이지 진입 차단됨")
     print(f"   - 현재 위치: {current_url}")
 
+# AC-006: 계정 관리 페이지 UI 확인
+def test_account_management_page_ui(driver, login):
+    """
+    계정 관리 페이지의 모든 UI 요소 확인:
+    1. 프로필 영역 (이미지, 이름, 계정명, 이메일, 휴대폰)
+    2. 섹션 목록 (7개 섹션)
+    """
+        
+    wait = WebDriverWait(driver, 15)
+    
+    # 1) 로그인
+    driver = login()
+    
+    # 메인 페이지 진입 확인
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
+    assert "/ai-helpy-chat" in driver.current_url
+    print("✅ 메인 페이지 진입")
+    
+    # 2) 프로필 버튼 클릭
+    _click_profile(driver, wait)
+    
+    # 3) 계정 관리 클릭
+    account_mgmt = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//*[contains(text(), '계정 관리') or contains(text(), 'Account Management')]"
+    )))
+    account_mgmt.click()
+    print("✅ 계정 관리 클릭")
+    
+    # 4) 새 탭 전환
+    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) > 1)
+    driver.switch_to.window(driver.window_handles[-1])
+    print("✅ 새 탭으로 전환")
+    
+    # 5) 계정 관리 페이지 로드 확인
+    wait.until(EC.url_contains("members/account"))
+    print(f"✅ 계정 관리 페이지 로드: {driver.current_url}")
+    
+    # 페이지 완전 로드 대기
+    WebDriverWait(driver, 3).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    
+    print("\n=== 프로필 영역 확인 ===")
+    
+    # 6) 프로필 영역 확인 (존재 여부만, 값은 체크 안 함)
+    profile_checks = {
+        "프로필 이미지": {
+            "selector": ".MuiAvatar-root, [class*='avatar'], img[alt*='profile']",
+            "method": "css"
+        },
+        "사용자 이름": {
+            "selector": "h6, .MuiTypography-h6, [class*='username']",
+            "method": "css",
+            "description": "비어있지 않은 텍스트"
+        },
+        "계정명": {
+            "selector": ".MuiTypography-caption, .css-19nibrb, [class*='MuiTypography-caption']",
+            "method": "css",
+            "description": "비어있지 않은 텍스트"
+        },
+        "이메일": {
+            "text": "@elice.com",
+            "method": "text",
+            "description": "@elice.com 포함"
+        },
+        "휴대폰 번호 섹션": {
+            "text": ["휴대폰", "Phone", "전화번호"],
+            "method": "text_any",
+            "description": "휴대폰 관련 라벨 존재"
+        },
+    }
+    
+    missing_profile_items = []
+    
+    for item_name, check_info in profile_checks.items():
+        try:
+            if check_info["method"] == "css":
+                element = driver.find_element(By.CSS_SELECTOR, check_info["selector"])
+                assert element.is_displayed(), f"{item_name}이 표시되지 않음"
+                
+                # 사용자 이름은 비어있지 않은지만 확인
+                if "description" in check_info and "텍스트" in check_info["description"]:
+                    text = element.text.strip()
+                    assert text, f"{item_name}이 비어있음"
+                    print(f"✅ {item_name} 확인 (값: {text})")
+                else:
+                    print(f"✅ {item_name} 확인")
+                
+            elif check_info["method"] == "text":
+                element = driver.find_element(
+                    By.XPATH,
+                    f"//*[contains(text(), '{check_info['text']}')]"
+                )
+                assert element.is_displayed(), f"{item_name}이 표시되지 않음"
+                print(f"✅ {item_name} 확인")
+                
+            elif check_info["method"] == "text_any":
+                found = False
+                for text in check_info["text"]:
+                    try:
+                        element = driver.find_element(
+                            By.XPATH,
+                            f"//*[contains(text(), '{text}')]"
+                        )
+                        if element.is_displayed():
+                            found = True
+                            print(f"✅ {item_name} 확인 ('{text}' 발견)")
+                            break
+                    except:
+                        continue
+                assert found, f"{item_name}을 찾을 수 없음"
+            
+        except Exception as e:
+            print(f"❌ {item_name} 없음: {e}")
+            missing_profile_items.append(item_name)
+    
+    # 프로필 영역 검증
+    assert len(missing_profile_items) == 0, f"누락된 프로필 항목: {missing_profile_items}"
+    
+    print("\n=== 섹션 목록 확인 ===")
+    
+    # 7) 섹션 목록 확인
+    sections = [
+        {"ko": "기본 정보", "en": "Basic Information"},
+        {"ko": "계정 보안", "en": "Account Security"},
+        {"ko": "본인 확인 정보", "en": "Verification Information"},
+        {"ko": "소셜 연결 계정", "en": "Social Accounts"},
+        {"ko": "프로모션 알림", "en": "Promotional Notifications"},
+        {"ko": "선호 언어", "en": "Preferred Language"},
+        {"ko": "계정 탈퇴", "en": "Delete Account"},
+    ]
+    
+    missing_sections = []
+    
+    for section in sections:
+        section_name = section["ko"]
+        found = False
+        
+        # 한국어 또는 영어로 찾기
+        for text in [section["ko"], section["en"]]:
+            try:
+                element = driver.find_element(
+                    By.XPATH,
+                    f"//*[contains(text(), '{text}')]"
+                )
+                # 스크롤해서 확인 (페이지 하단에 있을 수 있음)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                WebDriverWait(driver, 1).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
+                
+                if element.is_displayed():
+                    found = True
+                    print(f"✅ {section_name} 섹션 확인")
+                    break
+            except:
+                continue
+        
+        if not found:
+            print(f"❌ {section_name} 섹션 없음")
+            missing_sections.append(section_name)
+    
+    # 섹션 검증
+    assert len(missing_sections) == 0, f"누락된 섹션: {missing_sections}"
+    
+    print(f"\n✅ 계정 관리 페이지 UI 확인 완료")
+    print(f"   - 프로필 항목: {len(profile_checks)}개")
+    print(f"   - 섹션: {len(sections)}개")
+
 
 # AC-007
 def test_profile_dropdown_menu_items(driver, login):
@@ -179,7 +349,7 @@ def test_profile_dropdown_menu_items(driver, login):
     _click_profile(driver, wait)
     # print 삭제 (함수 안에서 이미 출력)
     
-# 3) 유저 프로필 섹션 상세 확인
+    # 3) 유저 프로필 섹션 상세 확인
     print("\n=== 유저 프로필 확인 ===")
 
     try:
