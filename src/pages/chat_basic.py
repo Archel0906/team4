@@ -1,21 +1,16 @@
 # 작성자: 이홍주
 
 import os
-import pytest
-import time
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
-from time import sleep
 
-#import platform
-#import pyautogui
+
+
 #import pyperclip
 
 def wait_for_new_response(driver, prev_count, timeout=40):
@@ -35,31 +30,21 @@ def wait_for_new_response(driver, prev_count, timeout=40):
     return driver.find_elements(By.CSS_SELECTOR, 'div[role="article"]')
 
 
-'''
-pyautugui 사용 미완성
-def paste_path_and_confirm(file_path, timeout=10):
-    """클립보드에 경로 복사 후 붙여넣기 + Enter. OS에 따라 붙여넣기 키 다름."""
-    system = platform.system()
-    pyperclip.copy(file_path)  # 클립보드에 복사 -> 붙여넣기 방식이 안정적
-    time.sleep(0.15)  # 복사 안정화
-    if system == "Darwin":  # macOS
-        pyautogui.hotkey('command', 'v')
-    else:  # Windows / Linux
-        pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.1)
-    pyautogui.press('enter')
-'''
+
 
 class chat_basic:
 
     def __init__(self, driver: webdriver.Chrome):
         self.driver = driver
 
-    def open_chat(self):
-        self.driver.get("https://qaproject.elice.io/ai-helpy-chat")
+    def open_chat(self, login):
+        self = login()
 
-    
-
+        WebDriverWait(self, 15).until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, 'textarea:not([aria-hidden="true"])')
+        )
+    )
 
     def send_message(self, message: str): # 메시지 입력
 
@@ -67,8 +52,6 @@ class chat_basic:
 
         prev_count = len(self.driver.find_elements(By.CSS_SELECTOR, 'div[role="article"]'))
         
-
-        # ✅ 메시지 입력
         input_box.send_keys(message)
         input_box.send_keys("\n")
 
@@ -77,33 +60,25 @@ class chat_basic:
 
 
     def click_plus(self): # + 버튼 클릭
-       input_button = self.driver.find_element(By.XPATH, "//*[@id='message-composer']/div[2]/div/button[1]")
+       input_button = self.driver.find_element(By.CSS_SELECTOR, "button[aria-haspopup='true']")
        input_button.click()
 
-    def click_upload(self): # 파일 업로드 버튼 클릭
-        upload_button = self.driver.find_element(By.XPATH, "/html/body/div[3]/div[3]/ul/div[1]")
-        upload_button.click()
+    def file_upload(self, file_name: str): # 파일 업로드 버튼 클릭
+        PAGE_DIR = os.path.dirname(os.path.abspath(__file__)) # 현재 폴더 절대 경로로 반환
+        self.resource_dir = os.path.realpath(os.path.join(PAGE_DIR, "..", "resources"))# 현재 폴더 기준으로 resources 폴더 경로 절대경로로 반환
+        
+        file_input = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="file"]')))
+        file_path = os.path.join(self.resource_dir, file_name)
+        file_input.send_keys(file_path)
+        WebDriverWait(self.driver, 10).until(EC.visibility_of_element_located((By.XPATH,f"//span[contains(@class, 'truncate') and contains(text(), '{os.path.basename(file_path)}')]")))
 
-    """
-    # 파일 업로드 창 제어 미완성
-    def upload_file(self, file_path: str, wait_before=2, wait_after=2): # 파일 업로드
-        FILE_PATH = r""   # 업로드할 파일의 절대경로 (OS에 맞게)
-        PAGE_URL = "https://example.com"          # 테스트할 페이지
-        UPLOAD_BUTTON_SELECTOR = '[data-action="file-upload"]'
 
-        time.sleep(0.6)  # 작동하지 않으면 0.8~1.2로 늘리기
-
-        # 붙여넣기 + Enter
-        paste_path_and_confirm(FILE_PATH)
-
-        # 업로드가 실제로 완료될 때까지 대기(페이지에 따라 조정)
-        # 예: 업로드 완료 메시지나 업로드된 파일 목록이 나타나는 셀렉터로 WebDriverWait 사용
-        # wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".upload-success")))
-
-        # 필요 시 더 대기
-        time.sleep(1)
-        print("파일 업로드 시도 완료. (성공 여부는 페이지 상태 확인 필요)")
-    """
+        input_box = self.driver.find_element(By.CSS_SELECTOR, 'textarea:not([aria-hidden="true"])')
+        input_box.send_keys("\n")
+   
+        responses = wait_for_new_response(self.driver, prev_count)
+        return responses[-1].text
+   
 
     def click_make_image(self): # 이미지 생성 버튼 클릭
         make_image_button = self.driver.find_element(By.XPATH, "/html/body/div[3]/div[3]/ul/div[3]")
