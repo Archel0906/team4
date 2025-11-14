@@ -80,7 +80,7 @@ def chrome_options():
     return opts
 
 # ───────────────────────────────────────────────────────────────
-# 7. 크롬 드라이버 경로 (webdriver-manager
+# 7. 크롬 드라이버 경로 (webdriver-manager)
 # ───────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
@@ -150,11 +150,10 @@ def _set_language_korean(driver):
         )
         
         print("✅ 한국어 설정 완료")
-        return True
-        
+                
     except Exception as e:
         print(f"⚠️ 언어 설정 실패: {e}")
-        return False
+        
 
 # ───────────────────────────────────────────────────────────────
 # 10. login fixture
