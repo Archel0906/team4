@@ -3,8 +3,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# 공통 헬퍼 import
-from tests.helpers.common_helpers import (_click_profile, _logout,
+
+from src.config.settings import get_default_admin
+from tests.helpers.common_helpers import (_click_profile, _logout, _set_language_korean, 
 )
 
 # AC-003: 이미 가입된 이메일로 회원가입 차단
@@ -461,3 +462,112 @@ def test_profile_dropdown_menu_items(driver, login):
     print(f"  - 메뉴 항목: {list(found_items.keys())}")
 
 
+# AC-020
+def test_account_deletion_button_activation(driver, login):
+    """
+    계정 탈퇴 버튼 활성화 확인
+    1. 탈퇴하기 버튼 클릭 (초기)
+    2. 확인 입력란 등장
+    3. 'Delete 계정명@elice.com' 입력
+    4. 탈퇴하기 버튼 빨간색으로 활성화
+    """
+        
+    wait = WebDriverWait(driver, 15)
+    
+    # 로그인한 계정 정보 가져오기
+    account = get_default_admin()
+    expected_text = f"Delete {account.username}"  # "Delete team4a@elice.com"
+    
+    print(f"예상 입력값: {expected_text}")
+    
+    # 1) 로그인
+    driver = login()
+    
+    # 메인 페이지 진입 확인
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
+    print("✅ 메인 페이지 진입")
+    
+    # 2) 프로필 → 계정 관리
+    _click_profile(driver, wait)
+    
+    account_mgmt = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//*[contains(text(), '계정 관리') or contains(text(), 'Account Management')]"
+    )))
+    account_mgmt.click()
+    print("✅ 계정 관리 클릭")
+    
+    # 새 탭 전환
+    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) > 1)
+    driver.switch_to.window(driver.window_handles[-1])
+
+    # 한국어 설정
+    _set_language_korean(driver)
+    
+    # 계정 관리 페이지 로드
+    wait.until(EC.url_contains("members/account"))
+    print("✅ 계정 관리 페이지 로드")
+    
+    # 3) 계정 탈퇴 섹션으로 스크롤
+    delete_section = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//*[contains(text(), '계정 탈퇴') or contains(text(), 'Delete Account')]"
+    )))
+    
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", delete_section)
+    WebDriverWait(driver, 2).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    print("✅ 계정 탈퇴 섹션 도달")
+    
+    # 4) 첫 번째 탈퇴하기 버튼 클릭 (초기 - clickable)
+    delete_button_initial = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//button[contains(text(), '탈퇴하기') or contains(text(), 'Delete')]"
+    )))
+    delete_button_initial.click()
+    print("✅ 탈퇴하기 버튼 클릭 (초기)")
+    
+    # 5) 부분 렌더링 대기 - 입력란 등장
+    confirmation_input = wait.until(EC.visibility_of_element_located((
+        By.XPATH,
+        f"//input[@placeholder='Delete {account.username}' or contains(@placeholder, 'Delete')]"
+    )))
+    print("✅ 확인 입력란 등장")
+    
+    # 플레이스홀더 확인 (선택적)
+    placeholder = confirmation_input.get_attribute("placeholder")
+    print(f"플레이스홀더: {placeholder}")
+    
+    # 6) 'Delete 계정명@elice.com' 입력
+    confirmation_input.clear()
+    confirmation_input.send_keys(expected_text)
+    print(f"✅ 입력 완료: {expected_text}")
+    
+    # 입력 반영 대기
+    WebDriverWait(driver, 2).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    
+    # 7) 탈퇴하기 버튼 활성화 확인
+    delete_button_final = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//button[contains(text(), '탈퇴하기') or contains(text(), 'Delete')]"
+    )))
+
+    is_enabled = delete_button_final.get_attribute("disabled") is None
+    assert is_enabled, "탈퇴하기 버튼이 활성화되지 않음"
+
+    print("✅ 탈퇴하기 버튼 활성화 확인")
+    
+    # 클릭 가능 상태 확인
+    try:
+        wait.until(EC.element_to_be_clickable((
+            By.XPATH,
+            "//button[contains(text(), '탈퇴하기') or contains(text(), 'Delete')]"
+        )))
+        print("✅ 탈퇴하기 버튼 클릭 가능 상태")
+    except:
+        pytest.fail("탈퇴하기 버튼이 클릭 가능 상태가 아님")
+    
+    print(f"\n✅ 계정 탈퇴 버튼 활성화 테스트 완료")
