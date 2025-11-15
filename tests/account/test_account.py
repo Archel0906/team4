@@ -498,16 +498,25 @@ def test_account_deletion_button_activation(driver, login):
     print("✅ 계정 관리 클릭")
     
     # 새 탭 전환
-    WebDriverWait(driver, 5).until(lambda d: len(d.window_handles) > 1)
     driver.switch_to.window(driver.window_handles[-1])
+    print("✅ 새 탭으로 전환")
 
-    # 한국어 설정
-    _set_language_korean(driver)
-    
-    # 계정 관리 페이지 로드
+    # 🆕 계정 관리 페이지 완전히 로드될 때까지 대기
     wait.until(EC.url_contains("members/account"))
-    print("✅ 계정 관리 페이지 로드")
-    
+    WebDriverWait(driver, 5).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    print(f"✅ 계정 관리 페이지 로드: {driver.current_url}")
+
+    # 🆕 이미 lang=ko가 있는지 확인
+    current_url = driver.current_url
+    if "lang=ko" not in current_url:
+        _set_language_korean(driver)
+        # 다시 계정 관리 페이지 확인
+        wait.until(EC.url_contains("members/account"))
+    else:
+        print("✅ 이미 한국어 설정됨")
+        
     # 3) 계정 탈퇴 섹션으로 스크롤
     delete_section = wait.until(EC.presence_of_element_located((
         By.XPATH,
