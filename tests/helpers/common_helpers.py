@@ -1,6 +1,7 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import re
 
 
 def _click_profile(driver, wait):
@@ -102,13 +103,17 @@ def _set_language_korean(driver):
             localStorage.setItem('i18nextLng', 'ko');
         """)
         
-        # URL에 lang 파라미터 추가
+        # URL에서 기존 lang 파라미터 제거 후 lang=ko 추가
         current_url = driver.current_url
-        if "lang=" not in current_url:
-            separator = "&" if "?" in current_url else "?"
-            driver.get(f"{current_url}{separator}lang=ko")
-        else:
-            driver.refresh()
+        
+        # lang= 파라미터 제거
+        url_without_lang = re.sub(r'[&?]lang=[^&]*', '', current_url)
+        
+        # lang=ko 추가
+        separator = "&" if "?" in url_without_lang else "?"
+        new_url = f"{url_without_lang}{separator}lang=ko"
+        
+        driver.get(new_url)
         
         WebDriverWait(driver, 10).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
@@ -120,5 +125,3 @@ def _set_language_korean(driver):
     except Exception as e:
         print(f"⚠️ 언어 설정 실패: {e}")
         return False
-
-
