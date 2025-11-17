@@ -1,56 +1,59 @@
+import re
+from pathlib import Path
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from pathlib import Path
-import re
+from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import TimeoutException
+
+# --- Avatar Locators ---
+
+# 1) 계정 관리 페이지 - 왼쪽 큰 아바타
+ACCOUNT_LEFT_AVATAR = (By.CSS_SELECTOR, ".MuiAvatar-root img")
+
+# 2) 우측 상단 헤더 아바타 (전체 페이지 공통)
+HEADER_AVATAR = (By.CSS_SELECTOR, "button.MuiAvatar-root img")
+
+# 3) 프로필 드롭다운 내 아바타
+ACCOUNT_DROPDOWN_AVATAR = (By.CSS_SELECTOR, ".MuiListItemAvatar-root img")
+
+# 4) 메인 페이지 - 사용자 정보 블록의 아바타
+MAIN_DROPDOWN_AVATAR = (By.CSS_SELECTOR, "[data-elice-user-profile-header] .MuiAvatar-root img")
+
+# 5) 로그인 페이지 아바타
+LOGIN_PAGE_AVATAR = (By.CSS_SELECTOR, ".MuiAvatar-root.MuiAvatar-circular img")
 
 
-def _click_profile(driver, wait):
+def _click_profile(driver, wait: WebDriverWait):
     """
-    우상단 프로필 버튼 클릭
-    헤더의 가장 오른쪽 버튼 선택 + 열린 메뉴 검증
+    우측 상단 프로필 아바타 버튼을 클릭해 드롭다운 메뉴를 연다.
+    - button.MuiAvatar-root 를 기준으로 클릭
+    - 드롭다운이 실제로 열렸는지 Logout/로그아웃 또는 계정 정보 블록이 보이는지로 확인
     """
-    # 1) 헤더 찾기
-    header = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "header, [role='banner']")))
+    try:
+        # 1) 우측 상단 프로필 버튼 클릭
+        profile_btn = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.MuiAvatar-root"))
+        )
+        profile_btn.click()
 
-    # 2) 헤더 안에서 클릭 가능한 후보 수집
-    candidates = header.find_elements(
-        By.CSS_SELECTOR,
-        "button, [role='button'], a[role='button']"
-    )
-    assert candidates, "헤더 내 클릭 가능한 버튼이 없음"
+        # 2) 드롭다운이 실제로 열린 것 확인
+        wait.until(
+            EC.visibility_of_any_elements_located((
+                By.XPATH,
+                "//*[contains(text(),'Logout') or contains(text(),'로그아웃') "
+                "or contains(text(),'계정 관리') or contains(text(),'Account Management')]"
+            ))
+        )
 
-    # 3) 화면상 가장 오른쪽(x가 가장 큰) 요소 선택
-    def rect_x(e):
-        return driver.execute_script("return arguments[0].getBoundingClientRect().x;", e)
+        # 여기까지 오면 성공
+        return True
 
-    # x가 큰 순서로 정렬하여 하나씩 시도 (툴팁 애니메이션/겹침 방지)
-    candidates = sorted(candidates, key=rect_x, reverse=True)
-
-    last_error = None
-    for el in candidates[:4]:  # 상위 4개만 시도 (과도한 클릭 방지)
-        try:
-            wait.until(EC.element_to_be_clickable(el))
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-            el.click()
-            
-            # 드롭다운 메뉴가 나타날 때까지 대기
-            WebDriverWait(driver, 2).until(
-                lambda d: any(
-                    f.is_displayed() 
-                    for xp in ["//*[contains(text(),'Payment History') or contains(text(),'결제 내역')]"]
-                    for f in d.find_elements(By.XPATH, xp)
-                )
-            )
-            
-            print("✅ 프로필 드롭다운 열림")
-            return True
-        except Exception as e:
-            last_error = e
-            continue
-
-    raise Exception(f"프로필 버튼 클릭 실패 (우측 후보들 시도) : {last_error}")
-
+    except TimeoutException as e:
+        raise Exception(f"프로필 드롭다운이 열리지 않았습니다: {e}") from e
+    except Exception as e:
+        raise Exception(f"프로필 버튼 클릭 실패: {e}") from e
+    
 
 def _find_payment_history(driver, wait):
     """프로필 → Payment History 버튼 '보이는지' 확인"""
@@ -176,8 +179,7 @@ def _upload_profile_avatar_image(driver, filename: str = "profile_avatar.jpg"):
     print(f"✅ 프로필 이미지 업로드: {image_path}")
 
 
-
-def _select_profile_avatar_menu_item(driver, wait, text: str):
+def _select_profile_avatar_menu(driver, wait, text: str):
     """
     아바타 편집 드롭다운에서 메뉴 항목 클릭
     예: '프로필 이미지 변경', '프로필 이미지 제거'
@@ -186,6 +188,63 @@ def _select_profile_avatar_menu_item(driver, wait, text: str):
         By.XPATH,
         f"//li[.='{text}' or contains(., '{text}')]"
     )))
-    item.click()
-    print(f"✅ 아바타 메뉴 클릭: {text}")
+    # item.click()
 
+
+# AC-021 공통 유틸: avatar src 추출
+def _get_avatar_src(driver, locator, wait: WebDriverWait | None = None, normalize: bool = True) -> str | None:
+    if wait is not None:
+        img = wait.until(EC.visibility_of_element_located(locator))
+    else:
+        img = driver.find_element(*locator)
+
+    src = img.get_attribute("src")
+    if not src:
+        return None
+
+    if not normalize:
+        return src
+
+    # 1) ? 뒤의 토큰 제거
+    base = src.split("?", 1)[0]
+    # 2) 마지막 / 뒤의 파일 이름만 남기기
+    filename = base.rsplit("/", 1)[-1]
+    return filename
+
+
+# 계정 관리 페이지: 3곳 src 수집
+def _get_account_mgmt_avatar_srcs(driver, wait: WebDriverWait):
+    
+    # 1) 왼쪽 큰 아바타 src
+    src_left = _get_avatar_src(driver, ACCOUNT_LEFT_AVATAR, wait)
+
+    # 2) 우측 상단 헤더 아바타 src
+    src_header = _get_avatar_src(driver, HEADER_AVATAR, wait)
+
+    # 3) 드롭다운 내부 아바타 src - 드롭다운 먼저 열어야 함
+    _click_profile(driver, wait)
+    src_dropdown = _get_avatar_src(driver, ACCOUNT_DROPDOWN_AVATAR, wait)
+
+    return src_left, src_header, src_dropdown
+
+
+# 메인 페이지: 2곳 src 수집
+def _get_main_page_avatar_srcs(driver, wait: WebDriverWait):
+    """
+    메인 페이지에서:
+    - 좌측 사용자 정보 블록
+    - 우측 상단 헤더 아바타
+    의 src 두 개 반환
+    """
+    src_main_dropdown = _get_avatar_src(driver, MAIN_DROPDOWN_AVATAR, wait)
+    src_header = _get_avatar_src(driver, HEADER_AVATAR, wait)
+
+    return src_main_dropdown, src_header
+
+
+# 로그인 페이지: 1곳 src 수집
+def _get_login_page_avatar_src(driver, wait: WebDriverWait):
+    """
+    로그인 페이지의 아바타 src 하나 반환
+    """
+    return _get_avatar_src(driver, LOGIN_PAGE_AVATAR, wait)
