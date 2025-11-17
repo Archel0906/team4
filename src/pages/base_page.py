@@ -1,6 +1,7 @@
 # 표준 라이브러리
 import os
 import time
+import pytest
 
 # 서드파티 라이브러리
 from selenium.webdriver.common.by import By
@@ -10,8 +11,9 @@ from selenium.common.exceptions import TimeoutException
 
 class BasePage:
 
-    def __init__(self, driver):
+    def __init__(self, driver, timeout=15):
         self.driver = driver
+        self.timeout = timeout
         # 모든 페이지에서 공통으로 사용하는 기본 페이지 클래스
 
     def open(self, url):
@@ -22,10 +24,6 @@ class BasePage:
         return WebDriverWait(self.driver, timeout).until(
             EC.element_to_be_clickable(locator)
         )
-
-    def click(self, locator):
-        element = self.wait_for_clickable(locator)
-        element.click()
 
     def wait_for_element(self, locator, timeout=30):
         return WebDriverWait(self.driver, timeout).until(
@@ -158,28 +156,38 @@ class BasePage:
         self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
     
     def logout(self):
-        wait = WebDriverWait(self.driver, 10)
+        """
+        우측 상단 프로필 아바타 버튼을 클릭해 드롭다운을 연 뒤,
+        Logout/로그아웃 메뉴를 클릭한다.
 
-        # 프로필 버튼 클릭
-        profile_btn = wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.MuiAvatar-root"))
-        )
-        profile_btn.click()
-        print("프로필 버튼 클릭 완료")
+        🔹 이 함수는 "로그아웃 버튼을 누르는 행위"까지만 책임집니다.
+        🔹 "로그인 페이지로 이동했는지" 확인은 각 테스트에서 상황에 맞게 검증하세요.
+        """
+        wait = WebDriverWait(self.driver, self.timeout)
 
-        # Logout 버튼 클릭 (JS 사용)
-        logout_btn = wait.until(
-            EC.presence_of_element_located((By.XPATH, "//p[text()='Logout']"))
-        )
-        self.driver.execute_script("arguments[0].click();", logout_btn)
-        print("로그아웃 버튼 클릭 완료")
+        # 1) 우측 상단 프로필 버튼 클릭
+        try:
+            profile_btn = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.MuiAvatar-root"))
+            )
+            # 오버레이/스크롤 문제 방지를 위해 JS 클릭 사용
+            self.driver.execute_script("arguments[0].click();", profile_btn)
+        except TimeoutException as e:
+            pytest.fail(f"로그아웃 실패: 우측 상단 프로필 버튼을 찾을 수 없습니다: {e}")
+
+        # 2) 드롭다운에서 Logout/로그아웃 항목 클릭
+        try:
+            logout_btn = wait.until(
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    "//*[contains(normalize-space(),'Logout') "
+                    "or contains(normalize-space(),'로그아웃')]"
+                ))
+            )
+            self.driver.execute_script("arguments[0].click();", logout_btn)
+        except TimeoutException as e:
+            pytest.fail(f"로그아웃 실패: Logout/로그아웃 버튼을 찾거나 클릭할 수 없습니다: {e}")
         
-    # 11/14 로그아웃 픽스쳐 추가(김은아)    
-
-    
-
-
-
-    
+    # 11/14 로그아웃 픽스쳐 추가(김은아), 11/18 수정(황지애)  
 
         

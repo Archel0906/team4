@@ -9,6 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
 from selenium.common.exceptions import MoveTargetOutOfBoundsException
+from tests.helpers.common_helpers import _click_profile
 
 DEBUG_MODE = os.getenv('TEST_DEBUG', 'false').lower() == 'true'
 
