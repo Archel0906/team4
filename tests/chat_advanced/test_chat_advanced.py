@@ -19,7 +19,7 @@ def test_chat_advanced_001(driver, login):
 
     chat.close_image_popup()
 
-def test_chat_advanced_005(driver, login):
+def test_chat_advanced_005(driver, login):# 퀴즈생성,퀴즈생성 완료시까지 대기하는 부분 미완성 
     chat = chat_basic(driver)
     chat.open_chat(login)
     
