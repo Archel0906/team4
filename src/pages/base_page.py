@@ -111,6 +111,7 @@ class BasePage:
 
 
     # -------------------- 11/14 김은아 추가 --------------------
+    
     def get_menu_buttons(self):
         chat_items = self.get_chat_list()
         menu_buttons = []
@@ -154,6 +155,8 @@ class BasePage:
         
     def scroll_into_view(self, element):
         self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+        
+# --------------- 11/14 로그아웃 픽스쳐 추가(김은아) ---------------
     
     def logout(self):
         """
@@ -188,6 +191,21 @@ class BasePage:
         except TimeoutException as e:
             pytest.fail(f"로그아웃 실패: Logout/로그아웃 버튼을 찾거나 클릭할 수 없습니다: {e}")
         
-    # 11/14 로그아웃 픽스쳐 추가(김은아), 11/18 수정(황지애)  
+# --------------- 11/18 수정(황지애) ---------------
+    
+    class BasePage:
+    def __init__(self, driver):
+        self.driver = driver
+
+    def open(self, url):
+        self.driver.get(url)
+
+    # Custom Agent 페이지 이동 메서드 추가
+    def open_custom_agent(self):
+        self.open("https://qaproject.elice.io/ai-helpy-chat/custom-agent")
+        
+# --------------- 11/18 커스텀 페이지 로그인 파트 추가 (김은아) ---------------
+    
+    
 
         
