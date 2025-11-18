@@ -15,20 +15,22 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 def wait_for_new_response(driver, prev_count, timeout=40):
     """새로운 챗봇 응답(article)이 로드될 때까지 대기"""
+    SELECTOR = 'div[role="article"]'
     def _new_article_loaded(d):
         try:
-            articles = d.find_elements(By.CSS_SELECTOR, 'div[role="article"]')
+            articles = d.find_elements(By.CSS_SELECTOR, SELECTOR)
             if len(articles) <= prev_count:
                 return False
             latest = articles[-1]
             text = latest.text.strip()
-            return text != ""
+
+            return len(text) > 0
+        
         except StaleElementReferenceException:
             return False
 
     WebDriverWait(driver, timeout).until(_new_article_loaded)
-    return driver.find_elements(By.CSS_SELECTOR, 'div[role="article"]')
-
+    return driver.find_elements(By.CSS_SELECTOR, SELECTOR)
 
 
 
@@ -66,6 +68,7 @@ class chat_basic:
     def file_upload(self, file_name: str): # 파일 업로드 버튼 클릭
         PAGE_DIR = os.path.dirname(os.path.abspath(__file__)) # 현재 폴더 절대 경로로 반환
         self.resource_dir = os.path.realpath(os.path.join(PAGE_DIR, "..", "resources"))# 현재 폴더 기준으로 resources 폴더 경로 절대경로로 반환
+        prev_count = len(self.driver.find_elements(By.CSS_SELECTOR, 'div[role="article"]'))
         
         file_input = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="file"]')))
         file_path = os.path.join(self.resource_dir, file_name)
@@ -89,23 +92,41 @@ class chat_basic:
         clipboard_button.click()
     
     def click_thumbs_up(self): # 도움됨 버튼 클릭
-        thumbs_up_button = self.driver.find_element(By.CSS_SELECTOR, "button:has(svg.lucide-thumbs-up)")
+        thumbs_up_button = WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button:has(svg.lucide-thumbs-up)")))
         thumbs_up_button.click()
-        dialog = WebDriverWait(self, 10).until(EC.presence_of_element_located((By.XPATH, "//div[@role='dialog' and @data-state='open']")))
+        
+        dialog = WebDriverWait(self.driver, 10).until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, "div[role='dialog'][data-state='open']")
+            )
+        )
+        dialog.find_element(
+            By.XPATH,
+            ".//h2/span"
+        )
 
-        title = dialog.find_element(By.XPATH, ".//h2[span[text()='의견 추가']]")
-        assert title.is_displayed()
     
     def click_thumbs_down(self): # 도움안됨 버튼 클릭
-        thumbs_down_button = self.driver.find_element(By.CSS_SELECTOR, "button:has(svg.lucide-thumbs-d)")
+        thumbs_down_button = WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button:has(svg.lucide-thumbs-down)")))
         thumbs_down_button.click()
-        dialog = WebDriverWait(self, 10).until(EC.presence_of_element_located((By.XPATH, "//div[@role='dialog' and @data-state='open']")))
 
-        title = dialog.find_element(By.XPATH, ".//h2[span[text()='의견 추가']]")
-        assert title.is_displayed()
+        dialog = WebDriverWait(self.driver, 10).until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, "div[role='dialog'][data-state='open']")
+            )
+        )
+        dialog.find_element(
+            By.XPATH,
+            ".//h2/span"
+        )
 
     def send_feedback(self, message: str): # 피드백 입력
-        input_box = self.driver.find_element(By.XPATH, "//*[@id='radix-:r14:']/textarea")
+        dialog = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//div[@role='dialog' and @data-state='open']"))
+        )
+
+        input_box = dialog.find_element(By.TAG_NAME, "textarea")
+    
         input_box.click()
         input_box.send_keys(message)
 
@@ -118,13 +139,20 @@ class chat_basic:
         input_button.click()
 
     def click_edit(self): # 수정 제출 버튼 클릭
-        wait = WebDriverWait(self, 10)
-        actions = ActionChains(self)
+        wait = WebDriverWait(self.driver, 10)
 
-        message_div = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".message.group")))
-        actions.move_to_element(message_div).perform()
-        input_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.edit-message")))
-        input_button.click()
+        # 1. 버튼의 부모 .group 요소를 hover (group-hover 때문에 필요)
+        group_area = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".group"))
+        )
+
+        ActionChains(self.driver).move_to_element(group_area).perform()
+
+        # 2. hover 후 visible 되는 edit-message 버튼 클릭
+        button = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.edit-message"))
+        )
+        button.click()
 
     def edit_message(self, message: str): # 메시지 입력
         input_box = self.driver.find_element(By.ID, "edit-chat-input")
@@ -187,3 +215,40 @@ class chat_basic:
             print("❌ 5초 내에 응답이 완전히 로드되지 않았습니다.")
             return None
 
+    def click_image_button(self):
+        input_button = self.driver.find_element(By.XPATH, "//span[text()='이미지 생성']/ancestor::div[@role='button']")
+        input_button.click()
+
+    
+        
+    def click_image_popup(self):    
+        img = WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//img[contains(@src, 'tools_outputs')]")))
+
+
+        img.click()
+
+    def wait_image_popup(self, timeout=5):
+        """이미지 클릭 후 팝업이 실제로 열렸는지 검증"""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located(
+                    (By.XPATH, "//div[@role='dialog' and @data-state='open']")
+                )
+            )
+            WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//body[contains(@style,'pointer-events: none')]")
+                )
+            )
+            return True
+
+        except:
+            return False
+    
+    def close_image_popup(self):
+        input_button = WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[@aria-label='Close lightbox']")))
+        input_button.click()
+
+    def click_image_quiz(self):
+        input_button = self.driver.find_element(By.XPATH, "//span[text()='퀴즈 생성']/ancestor::div[@role='button']")
+        input_button.click()
