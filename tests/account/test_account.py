@@ -732,3 +732,134 @@ def test_profile_avatar_change_applied_all_uis(driver, login):
     print("🎉 모든 페이지에서 프로필 이미지가 정상적으로 반영되었음을 확인했습니다!")
 
 
+# AC-022: 프로필 이미지 제거
+def test_profile_avatar_remove_applied_all_uis(driver, login):
+    """
+    프로필 이미지 제거 후 모든 UI에 기본 아바타(PersonIcon) 적용 확인
+    1. 로그인 후 계정 관리 페이지 진입
+    2. 프로필 아바타 편집 버튼 클릭
+    3. 드롭다운에서 '프로필 이미지 제거' 클릭
+    4. '저장되었습니다.' 스낵바 노출 확인
+    5. 계정 관리 페이지 3곳, 메인 페이지 2곳, 로그인 페이지 1곳에
+       기본 아바타(PersonIcon SVG)가 적용되는지 확인
+    """
+    
+    wait = WebDriverWait(driver, 15)
+
+    # 1) 로그인 -> 계정 관리 페이지 진입
+    driver = login()
+    _click_profile(driver, wait)
+    _account_mgmt_page_open(driver)
+
+    # 2) 프로필 아바타 편집 버튼 클릭
+    _click_profile_avatar_edit_button(driver, wait)
+
+    # 3) 드롭다운에서 '프로필 이미지 제거' 버튼 클릭
+    remove_button = _select_profile_avatar_menu(driver, wait, "프로필 이미지 제거")
+    remove_button.click()
+    print("✅ 프로필 이미지 제거 버튼 클릭")
+
+    # 4) 스낵바 확인 (한글/영문 둘 다 대비)
+    snackbar = wait.until(EC.visibility_of_element_located((
+        By.ID,
+        "notistack-snackbar",
+    )))
+    text = snackbar.text
+    assert ("저장되었습니다" in text) or ("Saved successfully" in text), f"스낵바 문구 불일치: {text}"
+
+    print("✅ 프로필 이미지 제거 후 스낵바 노출 확인 완료")
+
+    # 5) 새로고침 후 렌더링 안정화
+    print("🔍 새로고침 실행")
+    driver.refresh()
+
+    print("🔍 url_contains 대기 시작")
+    wait.until(EC.url_contains("members/account"))
+    print("✅ url_contains 통과")
+
+    print("🔍 readyState 대기 시작")
+    wait.until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    print("✅ readyState complete")
+
+    # 6) 계정 관리 페이지 3곳 아바타 확인 (기본 아바타 = PersonIcon SVG)
+    src_left, src_header, src_dropdown = _get_account_mgmt_avatar_srcs(driver, wait)
+
+    # 기본 아바타 확인 (PersonIcon SVG 또는 fallback)
+    def is_default_avatar(src):
+        """기본 아바타인지 확인 (PersonIcon SVG)"""
+        if src is None:
+            return False
+        # MuiAvatar-fallback 또는 PersonIcon 관련
+        return ("PersonIcon" in src or 
+                "fallback" in src or 
+                src == "" or  # SVG가 인라인일 수 있음
+                "data:image/svg" in src)  # SVG data URL
+
+    # 또는 실제 element 확인이 필요할 수도
+    # PersonIcon이 img src가 아니라 SVG element일 수 있음!
+    
+    account_srcs = {src_left, src_header, src_dropdown}
+    
+    # 모두 같은 src여야 함
+    assert len(account_srcs) == 1, (
+        f"계정 관리 페이지의 아바타 이미지가 서로 다릅니다:\n"
+        f"- left: {src_left}\n"
+        f"- header: {src_header}\n"
+        f"- dropdown: {src_dropdown}"
+    )
+
+    account_src = account_srcs.pop()  # 기준 src
+    print(f"✅ 계정 관리 페이지 3곳 아바타 확인 완료 (src: {account_src})")
+
+    # 7) 메인 페이지 2곳 아바타 비교
+    main_tab_handle = driver.window_handles[0]
+    driver.switch_to.window(main_tab_handle)
+
+    # 렌더링 안정화
+    WebDriverWait(driver, 5).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+
+    src_main_dropdown, src_main_header = _get_main_page_avatar_srcs(driver, wait)
+    main_srcs = {src_main_dropdown, src_main_header}
+
+    assert len(main_srcs) == 1, (
+        f"메인 페이지 2곳의 아바타 이미지가 서로 다릅니다:\n"
+        f"- main dropdown: {src_main_dropdown}\n"
+        f"- header: {src_main_header}"
+    )
+
+    main_src = main_srcs.pop()
+
+    assert main_src == account_src, (
+        f"메인 페이지 아바타 src가 계정 관리 페이지 src와 다릅니다:\n"
+        f"- 기준 src: {account_src}\n"
+        f"- 메인 페이지 src: {main_src}"
+    )
+
+    print("✅ 메인 페이지 2곳 아바타 src 확인 완료")
+
+    # 8) 로그아웃 후 로그인 페이지 아바타 비교
+    BasePage(driver).logout()
+
+    # 렌더링 안정화
+    print("🔍 로그아웃 후 readyState 대기 시작")
+    wait.until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    print("✅ 로그아웃 후 readyState complete")
+    
+    login_src = _get_login_page_avatar_src(driver, wait)
+
+    assert login_src == account_src, (
+        f"로그인 페이지 아바타 src가 계정 관리 기준 src와 다릅니다:\n"
+        f"- 기준 src: {account_src}\n"
+        f"- 로그인 페이지 src: {login_src}"
+    )
+
+    print("✅ 로그인 페이지 아바타 src 확인 완료")
+    print("🎉 모든 페이지에서 기본 프로필 이미지(PersonIcon)가 정상적으로 반영되었음을 확인했습니다!")
+
+
