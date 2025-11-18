@@ -1,8 +1,11 @@
-#### Defectives 🕵🏻‍♀️🕵🏻‍♂️🕵🏻‍♀️ 디펙티브즈
+#### Defectives 🕵🏻‍♀️🕵🏻‍♂️🕵🏻‍♀️ 디펙티브즈 ####
 
 Bug + Detective = Defective
+
 버그가 사라지는 순간까지 추적하는 사람들
+
 문제의 근본 원인을 해부하고,
+
 사용자의 경험을 더 나은 방향으로 밀어붙이는 품질 탐정단 입니다.
 
 <br><br>
@@ -36,10 +39,10 @@ https://docs.google.com/spreadsheets/d/1ZZv05y546QGz5dKMhhKX0-m8CWsCX8QYq6n-RxrV
 
 ### 📌 테스트 범위
 
-1.**회입**
+1.**회원가입**
 - 회원가입 기능
 
-2.**로인**
+2.**로그인**
 - 비밀번호 표시/가리기 기능
 - 로그인 기능
 
@@ -128,11 +131,11 @@ https://docs.google.com/spreadsheets/d/1ZZv05y546QGz5dKMhhKX0-m8CWsCX8QYq6n-RxrV
 
 - `$ venv/scripts/activate`
 
-3. **파이테스트 실행:**
+3. 파이테스트 실행:
 
 - `$ pytest tests --html=reports/report.html --self-contained-html`
 
-4. **가상환경 해제 방법**
+4. 가상환경 해제 방법
 
 - `$ deactivate`
 
