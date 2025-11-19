@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /workspace
 
@@ -39,5 +39,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 코드 복사
 COPY . .
 
-# 테스트 실행 (headless 모드)
+# 테스트 실행
 CMD ["pytest", "tests/", "-v"]
