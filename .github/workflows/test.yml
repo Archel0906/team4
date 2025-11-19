@@ -30,11 +30,17 @@ jobs:
     - name: 🧪 테스트 실행
       env:
         CI: true
+        ADMIN1_USERNAME: ${{ secrets.ADMIN1_USERNAME }}
+        ADMIN1_PASSWORD: ${{ secrets.ADMIN1_PASSWORD }}
+        ADMIN2_USERNAME: ${{ secrets.ADMIN2_USERNAME }}
+        ADMIN2_PASSWORD: ${{ secrets.ADMIN2_PASSWORD }}
+        ADMIN3_USERNAME: ${{ secrets.ADMIN3_USERNAME }}
+        ADMIN3_PASSWORD: ${{ secrets.ADMIN3_PASSWORD }}
       run: |
-        pytest tests/ -v
+        pytest tests/ -v --html=report.html --self-contained-html
     
     - name: 📊 테스트 결과 업로드
-      if: always()
+      if: always()  # 실패해도 업로드
       uses: actions/upload-artifact@v4
       with:
         name: test-report
