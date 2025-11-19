@@ -41,6 +41,9 @@ pipeline {
             steps {
                 echo '📊 테스트 결과 수집'
                 publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
                     reportDir: '.',
                     reportFiles: 'report.html',
                     reportName: 'Test Report'
