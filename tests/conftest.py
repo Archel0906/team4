@@ -107,8 +107,8 @@ def driver(chrome_driver_path):
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
     
-    # 브라우저 풀 사이즈
-    opts.add_argument("--start-maximized")  # 최대화!
+    # 모든 환경에서 동일한 창 크기
+    opts.add_argument("--window-size=1920,1080")
     
     # 한국어 설정 추가
     opts.add_argument("--lang=ko-KR")
