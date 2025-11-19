@@ -12,9 +12,9 @@ Bug + Detective = Defective
 
 ### 📌 팀 소개
 
-- 이홍주(팀장) : TC제작, 테스트 자동화, 자료 작성
-- 김은아(테스트 엔지니어): TC제작, 테스트 자동화, 자료 작성
-- 황지애(테스트 엔지니어): TC제작, 테스트 자동화, 자료 작성, CI/CD 구현
+- 이홍주(팀장) : 테스트 자동화, 자료 작성, 발표
+- 김은아(테스트 엔지니어): 테스트 자동화, 자료 작성, TC 제작, PPT 제작
+- 황지애(테스트 엔지니어): 테스트 자동화, 자료 작성, CI/CD 구현
 - 이준혁(X)
 
 <br><br>
@@ -40,7 +40,10 @@ Bug + Detective = Defective
 
 ### 📌 테스트 범위
 
-1.**빌링 & 이용내역**
+1.**계정 & 조직**
+
+
+2.**빌링 & 이용내역**
 - 크레딧 시스템: AI 서비스 이용량에 따른 선불 결제 방식
 - 크레딧 충전: 다양한 금액 단위로 미리 충전
 - 자동 충전: 크레딧 잔액이 설정 금액 이하로 떨어지면 자동 충전
@@ -90,7 +93,7 @@ Bug + Detective = Defective
 
 <br><br>
 
-### 📌 진행 기간/ 일정
+### 📌 진행 일정
 
 - 11.04 : 프로젝트 시작 / 역할 분담 / 테스트 케이스 설계
 
@@ -165,16 +168,3 @@ Bug + Detective = Defective
 4. 가상환경 해제 방법
 
 - `$ deactivate`
-
-<br><br>
-
-### 📌 Commit Conventions
-| Message  | Description                   |
-| -------- | ----------------------------- |      |
-| feat     | added new feature             |
-| refactor | updated existing feature/code |
-| docs     | added/updated docs            |
-| img      | added/updated images          |
-| init     | added initial files           |
-| ver      | updated version               |
-| chore    | add library                   |
