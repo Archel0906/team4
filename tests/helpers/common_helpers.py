@@ -268,7 +268,7 @@ def _get_login_page_avatar_src(driver, wait: WebDriverWait):
 
 
 def _close_login_popup(driver):
-    """로그인 화면 팝업 닫기 (명시적 대기만 사용)"""
+    """로그인 화면 팝업 닫기 (팝업 출현 대기 포함)"""
     selectors = [
         ".PopupCloseBtn__CloseButtonArea-ch-front__sc-14jjsiy-2 button",
         "button.PopupCloseBtn__CloseButton-ch-front__sc-14jjsiy-1",
@@ -277,13 +277,18 @@ def _close_login_popup(driver):
     
     for selector in selectors:
         try:
-            # 클릭 가능할 때까지 대기
+            # 1단계: 팝업이 나타날 때까지 대기 (최대 5초)
+            close_btn = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+            )
+            
+            # 2단계: 클릭 가능할 때까지 대기
             close_btn = WebDriverWait(driver, 3).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
             )
             close_btn.click()
             
-            # 팝업이 사라질 때까지 대기
+            # 3단계: 팝업이 사라질 때까지 대기
             WebDriverWait(driver, 3).until(
                 EC.invisibility_of_element_located((By.CSS_SELECTOR, selector))
             )
