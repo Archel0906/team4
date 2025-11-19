@@ -267,36 +267,26 @@ def _get_login_page_avatar_src(driver, wait: WebDriverWait):
     return _get_avatar_src(driver, LOGIN_PAGE_AVATAR, wait)
 
 
-def _close_login_popup(driver):
-    """로그인 화면 팝업 닫기 (팝업 출현 대기 포함)"""
-    selectors = [
-        ".PopupCloseBtn__CloseButtonArea-ch-front__sc-14jjsiy-2 button",
-        "button.PopupCloseBtn__CloseButton-ch-front__sc-14jjsiy-1",
-        "[class*='PopupCloseBtn__CloseButton']",
-    ]
-    
-    for selector in selectors:
-        try:
-            # 1단계: 팝업이 나타날 때까지 대기 (최대 5초)
-            close_btn = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+def _close_channeltalk_popup(driver, wait_time=5):
+    """Channel Talk 팝업 닫기 (있으면 닫기, 없으면 skip)"""
+    try:
+        # 짧은 시간만 기다림 (5초)
+        popup = WebDriverWait(driver, wait_time).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "article[role='dialog'][aria-modal='true']")
             )
-            
-            # 2단계: 클릭 가능할 때까지 대기
-            close_btn = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+        )
+        close_btn = popup.find_element(By.CSS_SELECTOR, "button")
+        close_btn.click()
+        
+        WebDriverWait(driver, 3).until(
+            EC.invisibility_of_element_located(
+                (By.CSS_SELECTOR, "article[role='dialog'][aria-modal='true']")
             )
-            close_btn.click()
-            
-            # 3단계: 팝업이 사라질 때까지 대기
-            WebDriverWait(driver, 3).until(
-                EC.invisibility_of_element_located((By.CSS_SELECTOR, selector))
-            )
-            
-            print(f"✅ 로그인 팝업 닫음: {selector}")
-            return True
-        except:
-            continue
-    
-    print("⚠️ 로그인 팝업 없음")
-    return False
+        )
+        print("✅ Channel Talk 팝업 닫음")
+        return True
+    except:
+        # 팝업 없으면 그냥 넘어감
+        print("⏭️ Channel Talk 팝업 없음 (정상)")
+        return False

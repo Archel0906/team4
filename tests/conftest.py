@@ -26,7 +26,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 # ───────────────────────────────────────────────────────────────
 from src.pages.base_page import BasePage
 from src.config.settings import get_default_admin
-from tests.helpers.common_helpers import (_set_language_korean, _close_login_popup, 
+from tests.helpers.common_helpers import (_set_language_korean, _close_channeltalk_popup, 
 )
 
 # ───────────────────────────────────────────────────────────────
@@ -148,8 +148,8 @@ def login(driver):
             "?continue_to=https%3A%2F%2Fqaproject.elice.io%2Fai-helpy-chat"
         )
         
-        # 🆕 3-1. 팝업 닫기 (페이지 로드 직후!)
-        _close_login_popup(driver)
+        # 🆕 로그인 전 팝업 닫기 시도
+        _close_channeltalk_popup(driver)
 
         # 4. 쿠키/스토리지 정리
         driver.delete_all_cookies()
@@ -181,6 +181,9 @@ def login(driver):
         # 8. 로그인 완료 대기
         WebDriverWait(driver, 30).until(EC.url_contains("/ai-helpy-chat"))
         
+        # 🆕 로그인 후 팝업 닫기 시도
+        _close_channeltalk_popup(driver)
+
         # 9. 언어를 한국어로 설정
         _set_language_korean(driver)
 
