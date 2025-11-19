@@ -82,17 +82,20 @@ def chrome_options():
     return opts
 
 # ───────────────────────────────────────────────────────────────
-# 7. 크롬 드라이버 경로 (webdriver-manager)
+# 7. 크롬 드라이버 경로 (webdriver-manager)   --- 11/19 수정(황지애)
 # ───────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
 def chrome_driver_path():
-    path = ChromeDriverManager().install()
-    print(f"\n[Setup] ChromeDriver 경로: {path}")
-    return path
+    """ChromeDriver 경로"""
+    if os.getenv("CI"):
+        return "chromedriver"
+    else:
+        return ChromeDriverManager().install()
+
 
 # ───────────────────────────────────────────────────────────────
-# 8. driver fixture (function scope)   --- 11/19 수정(황지애)
+# 8. driver fixture (function scope)       --- 11/19 수정(황지애)
 # ───────────────────────────────────────────────────────────────
 
 @pytest.fixture

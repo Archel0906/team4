@@ -1,3 +1,4 @@
+# .github/workflows/test.yml
 name: QA Automation Tests
 
 on:
@@ -14,14 +15,23 @@ jobs:
     - name: 📦 코드 체크아웃
       uses: actions/checkout@v4
     
-    - name: 🐳 Docker 이미지 빌드
-      run: docker build -t qa-test-image .
+    - name: 🐍 Python 3.12 설치
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    
+    - name: 🌐 Chrome 설치
+      uses: browser-actions/setup-chrome@v1
+    
+    - name: 📥 의존성 설치
+      run: |
+        pip install -r requirements.txt
     
     - name: 🧪 테스트 실행
+      env:
+        CI: true
       run: |
-        docker run --name qa-test-container \
-          qa-test-image \
-          pytest tests/ -v --html=report.html --self-contained-html
+        pytest tests/ -v
     
     - name: 📊 테스트 결과 업로드
       if: always()
