@@ -1,6 +1,6 @@
 # Defectives 🕵🏻‍♀️🕵🏻‍♂️🕵🏻‍♀️ 디펙티브즈 #
 
-Bug + Detective = Defective
+Defect + Detectives = Defectives
 
 버그가 사라지는 순간까지 추적하는 사람들
 
@@ -123,7 +123,7 @@ Bug + Detective = Defective
 <img src="https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54">
 <img src="https://img.shields.io/badge/-selenium-%43B02A?style=for-the-badge&logo=selenium&logoColor=white">
 <img src="https://img.shields.io/badge/pytest-%23ffffff.svg?style=for-the-badge&logo=pytest&logoColor=2f9fe3">
-<img src="https://img.shields.io/badge/jenkins-%232C5263.svg?style=for-the-badge&logo=jenkins&logoColor=white">
+<img src="https://img.shields.io/badge/GitHub%20Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white">
 
 <br><br>
 
@@ -133,15 +133,6 @@ Bug + Detective = Defective
 - python3-pip3  
 - python3-venv  
 - Google Chrome  
-
-<br><br>
-
-### 📌 젠킨스 - 필수 플러그인
-
-- git client
-- git plugin
-- gitlab api plugin
-- gitlab plugin
 
 <br><br>
 
